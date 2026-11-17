@@ -1,0 +1,63 @@
+# Deploys the API to AWS.
+# - Every push to main deploys to staging.
+# - Every version tag (v1.0.0, v1.2.3, ...) deploys to production.
+# - It can also be run by hand from the Actions tab.
+# Setup steps are in docs/deploy-setup.md. Until they are done, this workflow skips itself.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Where to deploy
+        type: choice
+        options: [staging, production]
+
+permissions:
+  id-token: write # lets GitHub prove to AWS who it is, so no AWS keys are stored here
+  contents: read
+
+jobs:
+  deploy:
+    if: vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.stage || (startsWith(github.ref, 'refs/tags/') && 'production' || 'staging') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+        env:
+          STAGE: test
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - run: sam build
+      - name: sam deploy
+        run: >
+          sam deploy
+          --config-env "$STAGE"
+          --no-confirm-changeset
+          --no-fail-on-empty-changeset
+          --parameter-overrides
+          Stage="$STAGE"
+          JwtSecret="$JWT_SECRET"
+          GoogleClientId="$GOOGLE_CLIENT_ID"
+          AllowedOrigins="$ALLOWED_ORIGINS"
+        env:
+          STAGE: ${{ inputs.stage || (startsWith(github.ref, 'refs/tags/') && 'production' || 'staging') }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}

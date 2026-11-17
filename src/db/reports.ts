@@ -1,0 +1,94 @@
+// Reading and writing smell reports.
+//
+// Table keys: userId + reportId. Report ids are UUID version 7, which start
+// with the time they were made, so sorting by id sorts by creation time.
+// Index byAreaDay: areaDay ("backa-topola#2026-11-17") + observedAt,
+// used to list reports in an area over a range of days.
+
+import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import type { SmellReport, UpdateReportRequest } from '@odormap/common';
+import { config } from '../config.js';
+import { db } from './client.js';
+
+/** A report as stored in the database. */
+export type ReportRecord = Omit<SmellReport, 'id'> & {
+  reportId: string;
+  areaDay: string;
+};
+
+export function areaDayKey(areaId: string, isoTime: string): string {
+  return `${areaId}#${isoTime.slice(0, 10)}`;
+}
+
+export function toSmellReport(record: ReportRecord): SmellReport {
+  const { reportId, areaDay, ...rest } = record;
+  return { id: reportId, ...rest };
+}
+
+export async function createReport(record: ReportRecord): Promise<void> {
+  await db.send(new PutCommand({ TableName: config.reportsTable, Item: record }));
+}
+
+export async function getReport(userId: string, reportId: string): Promise<ReportRecord | undefined> {
+  const result = await db.send(new GetCommand({ TableName: config.reportsTable, Key: { userId, reportId } }));
+  return result.Item as ReportRecord | undefined;
+}
+
+/** Changes duration and/or comment and returns the updated report. */
+export async function updateReport(
+  userId: string,
+  reportId: string,
+  changes: UpdateReportRequest,
+): Promise<ReportRecord> {
+  const fields = Object.entries(changes).filter(([, value]) => value !== undefined);
+  const result = await db.send(
+    new UpdateCommand({
+      TableName: config.reportsTable,
+      Key: { userId, reportId },
+      UpdateExpression: 'SET ' + fields.map(([name]) => `#${name} = :${name}`).join(', '),
+      ExpressionAttributeNames: Object.fromEntries(fields.map(([name]) => [`#${name}`, name])),
+      ExpressionAttributeValues: Object.fromEntries(fields.map(([name, value]) => [`:${name}`, value])),
+      ReturnValues: 'ALL_NEW',
+    }),
+  );
+  return result.Attributes as ReportRecord;
+}
+
+/** A user's own reports, newest first. */
+export async function listUserReports(userId: string, limit: number): Promise<ReportRecord[]> {
+  const result = await db.send(
+    new QueryCommand({
+      TableName: config.reportsTable,
+      KeyConditionExpression: 'userId = :userId',
+      ExpressionAttributeValues: { ':userId': userId },
+      ScanIndexForward: false,
+      Limit: limit,
+    }),
+  );
+  return (result.Items ?? []) as ReportRecord[];
+}
+
+/** All reports in one area on one day (UTC) observed between from and to. */
+export async function listReportsForAreaDay(
+  areaDay: string,
+  from: string,
+  to: string,
+): Promise<ReportRecord[]> {
+  const records: ReportRecord[] = [];
+  let startKey: Record<string, unknown> | undefined;
+  // DynamoDB returns at most 1 MB per call, so keep asking until it has sent everything.
+  do {
+    const result = await db.send(
+      new QueryCommand({
+        TableName: config.reportsTable,
+        IndexName: 'byAreaDay',
+        KeyConditionExpression: 'areaDay = :areaDay AND observedAt BETWEEN :from AND :to',
+        ExpressionAttributeValues: { ':areaDay': areaDay, ':from': from, ':to': to },
+        ExclusiveStartKey: startKey,
+      }),
+    );
+    records.push(...((result.Items ?? []) as ReportRecord[]));
+    startKey = result.LastEvaluatedKey;
+  } while (startKey);
+  return records;
+}
