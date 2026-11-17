@@ -190,6 +190,34 @@ describe('reports', () => {
     expect(response.json().duration).toBe('1_to_3_hours');
   });
 
+  it('lets the owner change strength and smell kind', async () => {
+    const stored = {
+      reportId: '019a9a3c-6b1e-7000-8000-0000000000cc',
+      userId,
+      areaId: 'backa-topola',
+      areaDay: 'backa-topola#2026-11-17',
+      createdAt: '2026-11-17T18:30:00.000Z',
+      observedAt: '2026-11-17T18:30:00.000Z',
+      location: topola,
+      strength: 3,
+      smellKind: 'not_set',
+      duration: 'not_set',
+    };
+    database.on(GetCommand).resolves({ Item: stored });
+    database.on(UpdateCommand).resolves({ Attributes: { ...stored, strength: 5, smellKind: 'pig_manure' } });
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/reports/${stored.reportId}`,
+      headers: await loggedIn(),
+      payload: { strength: 5, smellKind: 'pig_manure' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const update = database.commandCalls(UpdateCommand)[0]!.args[0].input;
+    expect(update.ExpressionAttributeValues).toEqual({ ':strength': 5, ':smellKind': 'pig_manure' });
+  });
+
   it('lists reports for others without names, comments or exact locations', async () => {
     database.on(QueryCommand).resolves({
       Items: [

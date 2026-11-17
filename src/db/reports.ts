@@ -34,7 +34,7 @@ export async function getReport(userId: string, reportId: string): Promise<Repor
   return result.Item as ReportRecord | undefined;
 }
 
-/** Changes duration and/or comment and returns the updated report. */
+/** Changes the given fields and returns the updated report. */
 export async function updateReport(
   userId: string,
   reportId: string,
