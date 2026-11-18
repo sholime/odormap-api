@@ -54,7 +54,6 @@ export async function reportRoutes(app: FastifyInstance) {
       strength: body.strength,
       odorKind: body.odorKind,
       odorKindOther: body.odorKindOther,
-      duration: body.duration,
       comment: body.comment,
       suspectedSourceId: body.suspectedSourceId,
       weather: await fetchWeather(body.location),
@@ -125,7 +124,6 @@ function toPublicReport(record: ReportRecord): PublicReport {
     strength: record.strength,
     odorKind: record.odorKind,
     odorKindOther: record.odorKindOther,
-    duration: record.duration,
     weather: record.weather,
   };
 }

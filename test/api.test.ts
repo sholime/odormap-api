@@ -204,7 +204,6 @@ describe('reports', () => {
     const report = response.json();
     expect(report.areaId).toBe('backa-topola');
     expect(report.odorKind).toBe('not_set');
-    expect(report.duration).toBe('not_set');
     expect(report.weather).toEqual({
       windSpeedMs: 3.2,
       windDirectionDeg: 270,
@@ -263,7 +262,7 @@ describe('reports', () => {
     expect(response.statusCode).toBe(429);
   });
 
-  it('lets the owner set the duration later', async () => {
+  it('lets the owner add a comment later', async () => {
     const stored = {
       reportId: '019a9a3c-6b1e-7000-8000-0000000000aa',
       userId,
@@ -274,20 +273,19 @@ describe('reports', () => {
       location: topola,
       strength: 3,
       odorKind: 'not_set',
-      duration: 'not_set',
     };
     database.on(GetCommand).resolves({ Item: stored });
-    database.on(UpdateCommand).resolves({ Attributes: { ...stored, duration: '1_to_3_hours' } });
+    database.on(UpdateCommand).resolves({ Attributes: { ...stored, comment: 'Still there' } });
 
     const response = await app.inject({
       method: 'PATCH',
       url: `/api/v1/reports/${stored.reportId}`,
       headers: await loggedIn(),
-      payload: { duration: '1_to_3_hours' },
+      payload: { comment: 'Still there' },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().duration).toBe('1_to_3_hours');
+    expect(response.json().comment).toBe('Still there');
   });
 
   it('lets the owner change strength and odor kind', async () => {
@@ -301,7 +299,6 @@ describe('reports', () => {
       location: topola,
       strength: 3,
       odorKind: 'not_set',
-      duration: 'not_set',
     };
     database.on(GetCommand).resolves({ Item: stored });
     database.on(UpdateCommand).resolves({ Attributes: { ...stored, strength: 5, odorKind: 'pig_manure' } });
@@ -329,8 +326,7 @@ describe('reports', () => {
           location: { lat: 45.815549, lon: 19.631812 },
           strength: 5,
           odorKind: 'pig_manure',
-          duration: 'not_set',
-          comment: 'Right behind my house at Main Street 12',
+              comment: 'Right behind my house at Main Street 12',
         },
       ],
     });
