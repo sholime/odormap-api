@@ -183,6 +183,24 @@ describe('guests', () => {
   });
 });
 
+describe('deleting an account', () => {
+  it('deletes the user and all their reports', async () => {
+    database.on(QueryCommand).resolves({ Items: [{ userId, reportId: 'r1' }, { userId, reportId: 'r2' }] });
+    database.on(BatchWriteCommand).resolves({});
+    database.on(DeleteCommand).resolves({});
+
+    const response = await app.inject({ method: 'DELETE', url: '/api/v1/me', headers: await loggedIn() });
+
+    expect(response.statusCode).toBe(204);
+    const deletes = Object.values(database.commandCalls(BatchWriteCommand)[0]!.args[0].input.RequestItems!)[0]!;
+    expect(deletes.map((request) => request.DeleteRequest!.Key)).toEqual([
+      { userId, reportId: 'r1' },
+      { userId, reportId: 'r2' },
+    ]);
+    expect(database.commandCalls(DeleteCommand)[0]!.args[0].input.Key).toEqual({ userId });
+  });
+});
+
 describe('reports', () => {
   it('needs a login', async () => {
     const response = await app.inject({ method: 'POST', url: '/api/v1/reports', payload: {} });

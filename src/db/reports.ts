@@ -99,6 +99,26 @@ export async function listReportsForAreaDay(
  * If this stops halfway, running it again finishes the job.
  */
 export async function moveReports(fromUserId: string, toUserId: string): Promise<void> {
+  const records = await listAllUserReports(fromUserId);
+  // DynamoDB writes at most 25 items per batch.
+  for (let i = 0; i < records.length; i += 25) {
+    const batch = records.slice(i, i + 25);
+    await writeBatch(batch.map((record) => ({ PutRequest: { Item: { ...record, userId: toUserId } } })));
+    await writeBatch(batch.map((record) => ({ DeleteRequest: { Key: { userId: fromUserId, reportId: record.reportId } } })));
+  }
+}
+
+/** Deletes all of a user's reports, e.g. when they delete their account. */
+export async function deleteUserReports(userId: string): Promise<void> {
+  const records = await listAllUserReports(userId);
+  for (let i = 0; i < records.length; i += 25) {
+    const batch = records.slice(i, i + 25);
+    await writeBatch(batch.map((record) => ({ DeleteRequest: { Key: { userId, reportId: record.reportId } } })));
+  }
+}
+
+/** Every report of one user, reading page by page. */
+async function listAllUserReports(userId: string): Promise<ReportRecord[]> {
   const records: ReportRecord[] = [];
   let startKey: Record<string, unknown> | undefined;
   do {
@@ -106,20 +126,14 @@ export async function moveReports(fromUserId: string, toUserId: string): Promise
       new QueryCommand({
         TableName: config.reportsTable,
         KeyConditionExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': fromUserId },
+        ExpressionAttributeValues: { ':userId': userId },
         ExclusiveStartKey: startKey,
       }),
     );
     records.push(...((result.Items ?? []) as ReportRecord[]));
     startKey = result.LastEvaluatedKey;
   } while (startKey);
-
-  // DynamoDB writes at most 25 items per batch.
-  for (let i = 0; i < records.length; i += 25) {
-    const batch = records.slice(i, i + 25);
-    await writeBatch(batch.map((record) => ({ PutRequest: { Item: { ...record, userId: toUserId } } })));
-    await writeBatch(batch.map((record) => ({ DeleteRequest: { Key: { userId: fromUserId, reportId: record.reportId } } })));
-  }
+  return records;
 }
 
 type WriteRequest = NonNullable<ConstructorParameters<typeof BatchWriteCommand>[0]['RequestItems']>[string];
