@@ -108,11 +108,24 @@ export async function moveReports(fromUserId: string, toUserId: string): Promise
   }
 }
 
-/** Deletes all of a user's reports, e.g. when they delete their account. */
-export async function deleteUserReports(userId: string): Promise<void> {
+/**
+ * The user id given to reports whose owner deleted their account.
+ * It belongs to nobody, so the reports stay on the map and in the analysis
+ * but can no longer be linked to a person.
+ */
+export const DELETED_USER_ID = '00000000-0000-0000-0000-000000000000';
+
+/**
+ * Keeps a user's reports when they delete their account: moves them to DELETED_USER_ID
+ * and removes the comment, which is free text and could name the person.
+ */
+export async function anonymizeUserReports(userId: string): Promise<void> {
   const records = await listAllUserReports(userId);
   for (let i = 0; i < records.length; i += 25) {
     const batch = records.slice(i, i + 25);
+    await writeBatch(
+      batch.map(({ comment, ...record }) => ({ PutRequest: { Item: { ...record, userId: DELETED_USER_ID } } })),
+    );
     await writeBatch(batch.map((record) => ({ DeleteRequest: { Key: { userId, reportId: record.reportId } } })));
   }
 }

@@ -1,9 +1,10 @@
 // The logged-in user's own profile, and deleting the account.
+// Deleting keeps the reports, but without any link to the person (see anonymizeUserReports).
 
 import type { FastifyInstance } from 'fastify';
 import { UpdateMeRequest } from '@odormap/common';
 import { requireUser } from '../auth.js';
-import { deleteUser, deleteUserReports, getUser, toUser, updateUser } from '../db/index.js';
+import { anonymizeUserReports, deleteUser, getUser, toUser, updateUser } from '../db/index.js';
 import { HttpError } from '../errors.js';
 
 export async function meRoutes(app: FastifyInstance) {
@@ -23,11 +24,11 @@ export async function meRoutes(app: FastifyInstance) {
     return toUser(await updateUser(userId, changes));
   });
 
-  /** Deletes the account and all its reports. This cannot be undone. */
+  /** Deletes the account. Its reports stay, without the user and without comments. */
   app.delete('/me', async (request, reply) => {
     const { userId } = await requireUser(request);
     // Reports first: if this stops halfway, the account still exists and can be deleted again.
-    await deleteUserReports(userId);
+    await anonymizeUserReports(userId);
     await deleteUser(userId);
     reply.status(204);
   });

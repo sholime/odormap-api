@@ -184,19 +184,23 @@ describe('guests', () => {
 });
 
 describe('deleting an account', () => {
-  it('deletes the user and all their reports', async () => {
-    database.on(QueryCommand).resolves({ Items: [{ userId, reportId: 'r1' }, { userId, reportId: 'r2' }] });
+  it('deletes the user but keeps their reports, without the user or the comment', async () => {
+    database.on(QueryCommand).resolves({ Items: [{ userId, reportId: 'r1', strength: 4, comment: 'Near my house' }] });
     database.on(BatchWriteCommand).resolves({});
     database.on(DeleteCommand).resolves({});
 
     const response = await app.inject({ method: 'DELETE', url: '/api/v1/me', headers: await loggedIn() });
 
     expect(response.statusCode).toBe(204);
-    const deletes = Object.values(database.commandCalls(BatchWriteCommand)[0]!.args[0].input.RequestItems!)[0]!;
-    expect(deletes.map((request) => request.DeleteRequest!.Key)).toEqual([
-      { userId, reportId: 'r1' },
-      { userId, reportId: 'r2' },
-    ]);
+    const [kept, removed] = database
+      .commandCalls(BatchWriteCommand)
+      .map((call) => Object.values(call.args[0].input.RequestItems!)[0]!);
+    expect(kept![0]!.PutRequest!.Item).toEqual({
+      userId: '00000000-0000-0000-0000-000000000000',
+      reportId: 'r1',
+      strength: 4,
+    });
+    expect(removed![0]!.DeleteRequest!.Key).toEqual({ userId, reportId: 'r1' });
     expect(database.commandCalls(DeleteCommand)[0]!.args[0].input.Key).toEqual({ userId });
   });
 });
