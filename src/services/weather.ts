@@ -1,6 +1,6 @@
 // Weather from Open-Meteo (https://open-meteo.com), free and without an API key.
 //
-// For a smell noticed in the last 30 minutes we use the current conditions.
+// For an odor noticed in the last 30 minutes we use the current conditions.
 // For an older one we use the hourly values for the hour it was noticed.
 
 import type { Point, Weather } from '@odormap/common';

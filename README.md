@@ -1,6 +1,6 @@
 # odormap-api
 
-Backend API for OdorMap: residents of Bačka Topola report bad smells, stored with location and wind data.
+Backend API for OdorMap: residents of Bačka Topola report bad odors, stored with location and wind data.
 
 It runs as one AWS Lambda function with a public URL, stores data in DynamoDB,
 and gets wind data from [Open-Meteo](https://open-meteo.com). Shared types and
@@ -40,8 +40,8 @@ All under `/api/v1`. "Login" means an `Authorization: Bearer <accessToken>` head
 | POST | /auth/google | Anyone | Sign in or register with Google |
 | POST | /auth/refresh | Anyone with a refresh token | Get new tokens |
 | GET, PATCH | /me | Login | Own profile |
-| POST | /reports | Login | Report a smell; the server adds the weather |
-| PATCH | /reports/:id | Login, owner | Change strength, smell kind, duration or comment later |
+| POST | /reports | Login | Report an odor; the server adds the weather |
+| PATCH | /reports/:id | Login, owner | Change strength, odor kind, duration or comment later |
 | GET | /reports/mine | Login | Own latest 50 reports |
 | GET | /reports | Login | Anonymous reports by area and time, optional map box |
 | GET | /sources | Login | Known pollution sources |

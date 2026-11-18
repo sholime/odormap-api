@@ -1,4 +1,4 @@
-// Submitting, changing and listing smell reports.
+// Submitting, changing and listing odor reports.
 
 import type { FastifyInstance } from 'fastify';
 import { CreateReportRequest, ReportsQuery, UpdateReportRequest, type PublicReport } from '@odormap/common';
@@ -11,7 +11,7 @@ import {
   getReport,
   listReportsForAreaDay,
   listUserReports,
-  toSmellReport,
+  toOdorReport,
   updateReport,
   type ReportRecord,
 } from '../db/index.js';
@@ -58,8 +58,8 @@ export async function reportRoutes(app: FastifyInstance) {
       location: body.location,
       locationAccuracyM: body.locationAccuracyM,
       strength: body.strength,
-      smellKind: body.smellKind,
-      smellKindOther: body.smellKindOther,
+      odorKind: body.odorKind,
+      odorKindOther: body.odorKindOther,
       duration: body.duration,
       comment: body.comment,
       suspectedSourceId: body.suspectedSourceId,
@@ -67,7 +67,7 @@ export async function reportRoutes(app: FastifyInstance) {
     };
     await createReport(record);
     reply.status(201);
-    return toSmellReport(record);
+    return toOdorReport(record);
   });
 
   app.patch<{ Params: { id: string } }>('/reports/:id', async (request) => {
@@ -75,13 +75,13 @@ export async function reportRoutes(app: FastifyInstance) {
     const changes = UpdateReportRequest.parse(request.body);
     // Looking up by the caller's own userId means people can only change their own reports.
     if (!(await getReport(userId, request.params.id))) throw new HttpError(404, 'Report not found');
-    return toSmellReport(await updateReport(userId, request.params.id, changes));
+    return toOdorReport(await updateReport(userId, request.params.id, changes));
   });
 
   app.get('/reports/mine', async (request) => {
     const { userId } = await requireUser(request);
     const records = await listUserReports(userId, 50);
-    return records.map(toSmellReport);
+    return records.map(toOdorReport);
   });
 
   app.get('/reports', async (request) => {
@@ -129,8 +129,8 @@ function toPublicReport(record: ReportRecord): PublicReport {
     observedAt: record.observedAt,
     location: roundLocation(record.location),
     strength: record.strength,
-    smellKind: record.smellKind,
-    smellKindOther: record.smellKindOther,
+    odorKind: record.odorKind,
+    odorKindOther: record.odorKindOther,
     duration: record.duration,
     weather: record.weather,
   };

@@ -1,4 +1,4 @@
-// Reading and writing smell reports.
+// Reading and writing odor reports.
 //
 // Table keys: userId + reportId. Report ids are UUID version 7, which start
 // with the time they were made, so sorting by id sorts by creation time.
@@ -6,12 +6,12 @@
 // used to list reports in an area over a range of days.
 
 import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import type { SmellReport, UpdateReportRequest } from '@odormap/common';
+import type { OdorReport, UpdateReportRequest } from '@odormap/common';
 import { config } from '../config.js';
 import { db } from './client.js';
 
 /** A report as stored in the database. */
-export type ReportRecord = Omit<SmellReport, 'id'> & {
+export type ReportRecord = Omit<OdorReport, 'id'> & {
   reportId: string;
   areaDay: string;
 };
@@ -20,7 +20,7 @@ export function areaDayKey(areaId: string, isoTime: string): string {
   return `${areaId}#${isoTime.slice(0, 10)}`;
 }
 
-export function toSmellReport(record: ReportRecord): SmellReport {
+export function toOdorReport(record: ReportRecord): OdorReport {
   const { reportId, areaDay, ...rest } = record;
   return { id: reportId, ...rest };
 }

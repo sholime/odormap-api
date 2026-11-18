@@ -109,7 +109,7 @@ describe('reports', () => {
     expect(response.statusCode).toBe(201);
     const report = response.json();
     expect(report.areaId).toBe('backa-topola');
-    expect(report.smellKind).toBe('not_set');
+    expect(report.odorKind).toBe('not_set');
     expect(report.duration).toBe('not_set');
     expect(report.weather).toMatchObject({ windSpeedMs: 3.2, windDirectionDeg: 270 });
   });
@@ -173,7 +173,7 @@ describe('reports', () => {
       observedAt: '2026-11-17T18:30:00.000Z',
       location: topola,
       strength: 3,
-      smellKind: 'not_set',
+      odorKind: 'not_set',
       duration: 'not_set',
     };
     database.on(GetCommand).resolves({ Item: stored });
@@ -190,7 +190,7 @@ describe('reports', () => {
     expect(response.json().duration).toBe('1_to_3_hours');
   });
 
-  it('lets the owner change strength and smell kind', async () => {
+  it('lets the owner change strength and odor kind', async () => {
     const stored = {
       reportId: '019a9a3c-6b1e-7000-8000-0000000000cc',
       userId,
@@ -200,22 +200,22 @@ describe('reports', () => {
       observedAt: '2026-11-17T18:30:00.000Z',
       location: topola,
       strength: 3,
-      smellKind: 'not_set',
+      odorKind: 'not_set',
       duration: 'not_set',
     };
     database.on(GetCommand).resolves({ Item: stored });
-    database.on(UpdateCommand).resolves({ Attributes: { ...stored, strength: 5, smellKind: 'pig_manure' } });
+    database.on(UpdateCommand).resolves({ Attributes: { ...stored, strength: 5, odorKind: 'pig_manure' } });
 
     const response = await app.inject({
       method: 'PATCH',
       url: `/api/v1/reports/${stored.reportId}`,
       headers: await loggedIn(),
-      payload: { strength: 5, smellKind: 'pig_manure' },
+      payload: { strength: 5, odorKind: 'pig_manure' },
     });
 
     expect(response.statusCode).toBe(200);
     const update = database.commandCalls(UpdateCommand)[0]!.args[0].input;
-    expect(update.ExpressionAttributeValues).toEqual({ ':strength': 5, ':smellKind': 'pig_manure' });
+    expect(update.ExpressionAttributeValues).toEqual({ ':strength': 5, ':odorKind': 'pig_manure' });
   });
 
   it('lists reports for others without names, comments or exact locations', async () => {
@@ -228,7 +228,7 @@ describe('reports', () => {
           observedAt: '2026-11-17T18:30:00.000Z',
           location: { lat: 45.815549, lon: 19.631812 },
           strength: 5,
-          smellKind: 'pig_manure',
+          odorKind: 'pig_manure',
           duration: 'not_set',
           comment: 'Right behind my house at Main Street 12',
         },
