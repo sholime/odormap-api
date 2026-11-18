@@ -140,7 +140,8 @@ export async function authRoutes(app: FastifyInstance) {
 
 /** The guest account the request is logged in as, if any. */
 async function findGuest(request: FastifyRequest): Promise<UserRecord | undefined> {
-  const current = await optionalUser(request);
+  // An expired or broken guest login just means "not a guest", so logging in still works.
+  const current = await optionalUser(request).catch(() => undefined);
   if (!current) return undefined;
   const user = await getUser(current.userId);
   return user && user.email === undefined ? user : undefined;

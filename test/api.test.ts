@@ -78,6 +78,20 @@ describe('accounts', () => {
     expect(response.statusCode).toBe(409);
   });
 
+  it('still logs in when the app sends an expired guest login', async () => {
+    const passwordHash = await hashPassword('correct-horse');
+    database.on(QueryCommand).resolves({ Items: [{ userId, email: 'ana@example.com', passwordHash, role: 'user' }] });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      headers: { authorization: 'Bearer expired-or-broken' },
+      payload: { email: 'ana@example.com', password: 'correct-horse' },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
   it('logs in with the right password only', async () => {
     const passwordHash = await hashPassword('correct-horse');
     database.on(QueryCommand).resolves({ Items: [{ userId, email: 'ana@example.com', passwordHash, role: 'user' }] });
