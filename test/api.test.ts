@@ -1,6 +1,14 @@
 // Tests the API end to end, with the database and the weather service replaced by fakes.
 
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  BatchWriteCommand,
+  DeleteCommand,
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  UpdateCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { mockClient } from 'aws-sdk-client-mock';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
@@ -130,6 +138,34 @@ describe('guests', () => {
     const update = database.commandCalls(UpdateCommand)[0]!.args[0].input;
     expect(update.Key).toEqual({ userId });
     expect(update.ExpressionAttributeValues![':email']).toBe('ana@example.com');
+  });
+
+  it('moves the reports of a guest when the guest logs into an existing account', async () => {
+    const guestId = userId;
+    const accountId = '019a9a3c-6b1e-7000-8000-000000000002';
+    const passwordHash = await hashPassword('correct-horse');
+    database.on(GetCommand).resolves({ Item: { userId: guestId, displayName: 'Guest', role: 'user' } });
+    database.on(QueryCommand, { IndexName: 'byEmail' }).resolves({
+      Items: [{ userId: accountId, email: 'ana@example.com', passwordHash, role: 'user' }],
+    });
+    database
+      .on(QueryCommand, { KeyConditionExpression: 'userId = :userId' })
+      .resolves({ Items: [{ userId: guestId, reportId: 'r1', strength: 3 }] });
+    database.on(BatchWriteCommand).resolves({});
+    database.on(DeleteCommand).resolves({});
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      headers: await loggedIn(),
+      payload: { email: 'ana@example.com', password: 'correct-horse' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [copy, remove] = database.commandCalls(BatchWriteCommand).map((call) => Object.values(call.args[0].input.RequestItems!)[0]!);
+    expect(copy![0]!.PutRequest!.Item).toMatchObject({ userId: accountId, reportId: 'r1' });
+    expect(remove![0]!.DeleteRequest!.Key).toEqual({ userId: guestId, reportId: 'r1' });
+    expect(database.commandCalls(DeleteCommand)[0]!.args[0].input.Key).toEqual({ userId: guestId });
   });
 });
 

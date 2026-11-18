@@ -5,7 +5,7 @@
 // Index byAreaDay: areaDay ("backa-topola#2026-11-17") + observedAt,
 // used to list reports in an area over a range of days.
 
-import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { BatchWriteCommand, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import type { OdorReport, UpdateReportRequest } from '@odormap/common';
 import { config } from '../config.js';
 import { db } from './client.js';
@@ -91,4 +91,44 @@ export async function listReportsForAreaDay(
     startKey = result.LastEvaluatedKey;
   } while (startKey);
   return records;
+}
+
+/**
+ * Moves all of one user's reports to another user, e.g. when a guest logs into an existing account.
+ * The user id is part of the key, so each report is copied to the new user, then the old copy is deleted.
+ * If this stops halfway, running it again finishes the job.
+ */
+export async function moveReports(fromUserId: string, toUserId: string): Promise<void> {
+  const records: ReportRecord[] = [];
+  let startKey: Record<string, unknown> | undefined;
+  do {
+    const result = await db.send(
+      new QueryCommand({
+        TableName: config.reportsTable,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': fromUserId },
+        ExclusiveStartKey: startKey,
+      }),
+    );
+    records.push(...((result.Items ?? []) as ReportRecord[]));
+    startKey = result.LastEvaluatedKey;
+  } while (startKey);
+
+  // DynamoDB writes at most 25 items per batch.
+  for (let i = 0; i < records.length; i += 25) {
+    const batch = records.slice(i, i + 25);
+    await writeBatch(batch.map((record) => ({ PutRequest: { Item: { ...record, userId: toUserId } } })));
+    await writeBatch(batch.map((record) => ({ DeleteRequest: { Key: { userId: fromUserId, reportId: record.reportId } } })));
+  }
+}
+
+type WriteRequest = NonNullable<ConstructorParameters<typeof BatchWriteCommand>[0]['RequestItems']>[string];
+
+/** Sends one batch, repeating whatever DynamoDB could not process the first time. */
+async function writeBatch(requests: WriteRequest): Promise<void> {
+  let pending = requests;
+  while (pending.length > 0) {
+    const result = await db.send(new BatchWriteCommand({ RequestItems: { [config.reportsTable]: pending } }));
+    pending = result.UnprocessedItems?.[config.reportsTable] ?? [];
+  }
 }

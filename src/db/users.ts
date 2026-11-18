@@ -3,7 +3,7 @@
 // Table keys: userId.
 // Indexes: byEmail (email), byGoogle (googleId).
 
-import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DeleteCommand, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import type { Language, Role, User } from '@odormap/common';
 import { config } from '../config.js';
 import { db } from './client.js';
@@ -78,6 +78,10 @@ export async function updateUser(
     }),
   );
   return result.Attributes as UserRecord;
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  await db.send(new DeleteCommand({ TableName: config.usersTable, Key: { userId } }));
 }
 
 async function findOne(indexName: string, attribute: string, value: string): Promise<UserRecord | undefined> {

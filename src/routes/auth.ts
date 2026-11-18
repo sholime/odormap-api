@@ -1,14 +1,25 @@
 // Registering, logging in and refreshing a session.
 //
-// Guests: someone can use the app without an account (POST /auth/guest). If a guest
-// later registers or signs in with Google while still logged in as the guest, the
-// guest account becomes the full account, so their reports are kept.
+// Guests: someone can use the app without an account (POST /auth/guest). When a guest
+// registers, logs in or signs in with Google while still logged in as the guest, their
+// reports are kept:
+// - a new account: the guest account itself becomes the full account;
+// - an existing account: the guest's reports move to it and the guest is deleted.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { GoogleLoginRequest, GuestLoginRequest, LoginRequest, RefreshRequest, RegisterRequest } from '@odormap/common';
 import { v7 as newId } from 'uuid';
 import { optionalUser } from '../auth.js';
-import { createUser, findUserByEmail, findUserByGoogleId, getUser, updateUser, type UserRecord } from '../db/index.js';
+import {
+  createUser,
+  deleteUser,
+  findUserByEmail,
+  findUserByGoogleId,
+  getUser,
+  moveReports,
+  updateUser,
+  type UserRecord,
+} from '../db/index.js';
 import { HttpError } from '../errors.js';
 import { verifyGoogleIdToken } from '../services/google.js';
 import { hashPassword, verifyPassword } from '../services/passwords.js';
@@ -52,7 +63,7 @@ export async function authRoutes(app: FastifyInstance) {
     const passwordMatches = user?.passwordHash ? await verifyPassword(body.password, user.passwordHash) : false;
     // Same message whether the email or the password is wrong, so nobody can probe for accounts.
     if (!user || !passwordMatches) throw new HttpError(401, 'Wrong email or password');
-    return createTokens(user);
+    return logIn(request, user);
   });
 
   app.post('/auth/google', async (request, reply) => {
@@ -61,13 +72,13 @@ export async function authRoutes(app: FastifyInstance) {
 
     // 1. Someone who signed in with Google before.
     const existing = await findUserByGoogleId(google.googleId);
-    if (existing) return createTokens(existing);
+    if (existing) return logIn(request, existing);
 
     // 2. Someone who registered with email and password and now uses Google with the same email.
     const sameEmail = await findUserByEmail(google.email);
     if (sameEmail) {
       const linked = await updateUser(sameEmail.userId, { googleId: google.googleId });
-      return createTokens(linked);
+      return logIn(request, linked);
     }
 
     // 3. A guest signing in with Google for the first time: their guest account becomes the Google account.
@@ -133,4 +144,14 @@ async function findGuest(request: FastifyRequest): Promise<UserRecord | undefine
   if (!current) return undefined;
   const user = await getUser(current.userId);
   return user && user.email === undefined ? user : undefined;
+}
+
+/** Logs into an existing account. A guest's reports move to that account first. */
+async function logIn(request: FastifyRequest, user: UserRecord) {
+  const guest = await findGuest(request);
+  if (guest && guest.userId !== user.userId) {
+    await moveReports(guest.userId, user.userId);
+    await deleteUser(guest.userId);
+  }
+  return createTokens(user);
 }
