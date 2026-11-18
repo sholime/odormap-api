@@ -29,8 +29,9 @@ beforeEach(() => {
           time: '2026-11-17T18:30',
           wind_speed_10m: 3.2,
           wind_direction_10m: 270,
-          wind_gusts_10m: 6.1,
           temperature_2m: 8.4,
+          relative_humidity_2m: 81,
+          pressure_msl: 1021.3,
         },
       }),
     ),
@@ -111,7 +112,13 @@ describe('reports', () => {
     expect(report.areaId).toBe('backa-topola');
     expect(report.odorKind).toBe('not_set');
     expect(report.duration).toBe('not_set');
-    expect(report.weather).toMatchObject({ windSpeedMs: 3.2, windDirectionDeg: 270 });
+    expect(report.weather).toEqual({
+      windSpeedMs: 3.2,
+      windDirectionDeg: 270,
+      temperatureC: 8.4,
+      humidityPercent: 81,
+      pressureHpa: 1021.3,
+    });
   });
 
   it('still saves the report when the weather service is down', async () => {

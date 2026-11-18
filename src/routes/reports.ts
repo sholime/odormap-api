@@ -22,7 +22,6 @@ import { fetchWeather } from '../services/weather.js';
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 const MAX_REPORTS_PER_HOUR = 10;
-const MAX_REPORT_AGE_DAYS = 7;
 const MAX_QUERY_DAYS = 31;
 
 export async function reportRoutes(app: FastifyInstance) {
@@ -30,14 +29,6 @@ export async function reportRoutes(app: FastifyInstance) {
     const { userId } = await requireUser(request);
     const body = CreateReportRequest.parse(request.body);
     const now = new Date();
-
-    const observedAt = body.observedAt ? new Date(body.observedAt) : now;
-    if (observedAt.getTime() > now.getTime() + 5 * 60 * 1000) {
-      throw new HttpError(400, 'The time noticed cannot be in the future');
-    }
-    if (now.getTime() - observedAt.getTime() > MAX_REPORT_AGE_DAYS * DAY) {
-      throw new HttpError(400, `Reports can be at most ${MAX_REPORT_AGE_DAYS} days old`);
-    }
 
     const area = findAreaFor(body.location, AREAS);
     if (!area) throw new HttpError(400, 'This location is outside the areas OdorMap covers');
@@ -54,9 +45,10 @@ export async function reportRoutes(app: FastifyInstance) {
       areaId: area.areaId,
       // Area and day together, e.g. "backa-topola#2026-11-18". The database index uses it
       // to find all reports for one area on one day quickly (see db/reports.ts).
-      areaDay: areaDayKey(area.areaId, observedAt.toISOString()),
+      areaDay: areaDayKey(area.areaId, now.toISOString()),
       createdAt: now.toISOString(),
-      observedAt: observedAt.toISOString(),
+      // Reports are for odors present right now, so the time noticed is the time sent.
+      observedAt: now.toISOString(),
       location: body.location,
       locationAccuracyM: body.locationAccuracyM,
       strength: body.strength,
@@ -65,7 +57,7 @@ export async function reportRoutes(app: FastifyInstance) {
       duration: body.duration,
       comment: body.comment,
       suspectedSourceId: body.suspectedSourceId,
-      weather: await fetchWeather(body.location, observedAt, now),
+      weather: await fetchWeather(body.location),
     };
     await createReport(record);
     reply.status(201);
