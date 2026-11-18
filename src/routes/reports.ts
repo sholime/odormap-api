@@ -1,7 +1,7 @@
 // Submitting, changing and listing odor reports.
 
 import type { FastifyInstance } from 'fastify';
-import { CreateReportRequest, ReportsQuery, UpdateReportRequest, type PublicReport } from '@odormap/common';
+import { CreateReportRequest, ReportsQuery, UpdateReportRequest, findAreaFor, type PublicReport } from '@odormap/common';
 import { v7 as newId } from 'uuid';
 import { AREAS, getArea } from '../areas.js';
 import { requireUser } from '../auth.js';
@@ -16,7 +16,7 @@ import {
   type ReportRecord,
 } from '../db/index.js';
 import { HttpError } from '../errors.js';
-import { findAreaFor, roundLocation } from '../geo.js';
+import { roundLocation } from '../geo.js';
 import { fetchWeather } from '../services/weather.js';
 
 const HOUR = 60 * 60 * 1000;

@@ -1,20 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AREAS } from '../src/areas.js';
-import { findAreaFor, isInsidePolygon, roundLocation } from '../src/geo.js';
-
-const square = [
-  { lat: 0, lon: 0 },
-  { lat: 0, lon: 10 },
-  { lat: 10, lon: 10 },
-  { lat: 10, lon: 0 },
-];
-
-describe('isInsidePolygon', () => {
-  it('finds points inside and outside a square', () => {
-    expect(isInsidePolygon({ lat: 5, lon: 5 }, square)).toBe(true);
-    expect(isInsidePolygon({ lat: 15, lon: 5 }, square)).toBe(false);
-  });
-});
+import { findAreaFor } from '@odormap/common';
+import { roundLocation } from '../src/geo.js';
 
 describe('findAreaFor', () => {
   it('puts the centre of Bačka Topola in its area', () => {

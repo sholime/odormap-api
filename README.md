@@ -16,7 +16,7 @@ src/
   config.ts       settings read from environment variables
   areas.ts        the towns the app covers and their boundaries
   auth.ts         reads the logged-in user from the request
-  geo.ts          location helpers (inside an area, rounding)
+  geo.ts          rounding locations for public reports
   errors.ts       HttpError, for answering with a status code
   routes/         one file per group of endpoints
   services/       passwords, login tokens, Google sign-in, weather
