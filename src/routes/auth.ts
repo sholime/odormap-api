@@ -1,9 +1,14 @@
 // Registering, logging in and refreshing a session.
+//
+// Guests: someone can use the app without an account (POST /auth/guest). If a guest
+// later registers or signs in with Google while still logged in as the guest, the
+// guest account becomes the full account, so their reports are kept.
 
-import type { FastifyInstance } from 'fastify';
-import { GoogleLoginRequest, LoginRequest, RefreshRequest, RegisterRequest } from '@odormap/common';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { GoogleLoginRequest, GuestLoginRequest, LoginRequest, RefreshRequest, RegisterRequest } from '@odormap/common';
 import { v7 as newId } from 'uuid';
-import { createUser, findUserByEmail, findUserByGoogleId, getUser, updateUser } from '../db/index.js';
+import { optionalUser } from '../auth.js';
+import { createUser, findUserByEmail, findUserByGoogleId, getUser, updateUser, type UserRecord } from '../db/index.js';
 import { HttpError } from '../errors.js';
 import { verifyGoogleIdToken } from '../services/google.js';
 import { hashPassword, verifyPassword } from '../services/passwords.js';
@@ -14,6 +19,16 @@ export async function authRoutes(app: FastifyInstance) {
     const body = RegisterRequest.parse(request.body);
     if (await findUserByEmail(body.email)) {
       throw new HttpError(409, 'An account with this email already exists');
+    }
+    const guest = await findGuest(request);
+    if (guest) {
+      const upgraded = await updateUser(guest.userId, {
+        email: body.email,
+        passwordHash: await hashPassword(body.password),
+        displayName: body.displayName,
+        language: body.language,
+      });
+      return createTokens(upgraded);
     }
     const now = new Date().toISOString();
     const user = {
@@ -55,7 +70,18 @@ export async function authRoutes(app: FastifyInstance) {
       return createTokens(linked);
     }
 
-    // 3. A new person: they must accept the privacy notice first.
+    // 3. A guest signing in with Google for the first time: their guest account becomes the Google account.
+    const guest = await findGuest(request);
+    if (guest) {
+      const upgraded = await updateUser(guest.userId, {
+        email: google.email,
+        googleId: google.googleId,
+        displayName: google.name,
+      });
+      return createTokens(upgraded);
+    }
+
+    // 4. A new person: they must accept the privacy notice first.
     if (body.acceptPrivacy !== true) {
       throw new HttpError(400, 'The privacy notice must be accepted to create an account');
     }
@@ -75,6 +101,22 @@ export async function authRoutes(app: FastifyInstance) {
     return createTokens(user);
   });
 
+  app.post('/auth/guest', async (request, reply) => {
+    const body = GuestLoginRequest.parse(request.body);
+    const now = new Date().toISOString();
+    const user = {
+      userId: newId(),
+      displayName: 'Guest',
+      language: body.language,
+      role: 'user' as const,
+      privacyAcceptedAt: now,
+      createdAt: now,
+    };
+    await createUser(user);
+    reply.status(201);
+    return createTokens(user);
+  });
+
   app.post('/auth/refresh', async (request) => {
     const body = RefreshRequest.parse(request.body);
     const { userId } = await readToken(body.refreshToken, 'refresh');
@@ -83,4 +125,12 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user) throw new HttpError(401, 'Not logged in or session expired');
     return createTokens(user);
   });
+}
+
+/** The guest account the request is logged in as, if any. */
+async function findGuest(request: FastifyRequest): Promise<UserRecord | undefined> {
+  const current = await optionalUser(request);
+  if (!current) return undefined;
+  const user = await getUser(current.userId);
+  return user && user.email === undefined ? user : undefined;
 }

@@ -90,6 +90,49 @@ describe('accounts', () => {
   });
 });
 
+describe('guests', () => {
+  it('creates a guest account without email or password', async () => {
+    database.on(PutCommand).resolves({});
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/guest',
+      payload: { language: 'sr', acceptPrivacy: true },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toHaveProperty('accessToken');
+    const saved = database.commandCalls(PutCommand)[0]!.args[0].input.Item!;
+    expect(saved.email).toBeUndefined();
+    expect(saved.passwordHash).toBeUndefined();
+  });
+
+  it('needs the privacy notice accepted', async () => {
+    const response = await app.inject({ method: 'POST', url: '/api/v1/auth/guest', payload: { language: 'sr' } });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('turns the guest into a full account on register, keeping the same user', async () => {
+    const guest = { userId, displayName: 'Guest', language: 'sr', role: 'user', privacyAcceptedAt: 'x', createdAt: 'x' };
+    database.on(QueryCommand).resolves({ Items: [] });
+    database.on(GetCommand).resolves({ Item: guest });
+    database.on(UpdateCommand).resolves({ Attributes: { ...guest, email: 'ana@example.com' } });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      headers: await loggedIn(),
+      payload: { email: 'Ana@Example.com', password: 'long-enough', displayName: 'Ana', language: 'hu', acceptPrivacy: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(database.commandCalls(PutCommand)).toHaveLength(0);
+    const update = database.commandCalls(UpdateCommand)[0]!.args[0].input;
+    expect(update.Key).toEqual({ userId });
+    expect(update.ExpressionAttributeValues![':email']).toBe('ana@example.com');
+  });
+});
+
 describe('reports', () => {
   it('needs a login', async () => {
     const response = await app.inject({ method: 'POST', url: '/api/v1/reports', payload: {} });

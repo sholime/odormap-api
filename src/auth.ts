@@ -12,6 +12,11 @@ export async function requireUser(request: FastifyRequest): Promise<CurrentUser>
   return readToken(token, 'access');
 }
 
+/** The logged-in user, or undefined if the request has no login at all. */
+export async function optionalUser(request: FastifyRequest): Promise<CurrentUser | undefined> {
+  return request.headers.authorization ? requireUser(request) : undefined;
+}
+
 /** The logged-in user, who must be an admin. Throws 401 or 403 otherwise. */
 export async function requireAdmin(request: FastifyRequest): Promise<CurrentUser> {
   const user = await requireUser(request);

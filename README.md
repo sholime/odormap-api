@@ -35,9 +35,10 @@ All under `/api/v1`. "Login" means an `Authorization: Bearer <accessToken>` head
 
 | Method | Path | Who | What it does |
 | --- | --- | --- | --- |
-| POST | /auth/register | Anyone | Create an account with email and password |
+| POST | /auth/register | Anyone | Create an account with email and password (a logged-in guest keeps their reports) |
 | POST | /auth/login | Anyone | Log in, get tokens |
-| POST | /auth/google | Anyone | Sign in or register with Google |
+| POST | /auth/google | Anyone | Sign in or register with Google (a logged-in guest keeps their reports) |
+| POST | /auth/guest | Anyone | Use the app without an account (creates a guest) |
 | POST | /auth/refresh | Anyone with a refresh token | Get new tokens |
 | GET, PATCH | /me | Login | Own profile |
 | POST | /reports | Login | Report an odor; the server adds the weather |

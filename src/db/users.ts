@@ -11,7 +11,8 @@ import { db } from './client.js';
 /** A user as stored in the database. */
 export type UserRecord = {
   userId: string;
-  email: string;
+  /** Missing for guests (accounts made with "continue without account"). */
+  email?: string;
   /** Missing for accounts that only sign in with Google. */
   passwordHash?: string;
   googleId?: string;
@@ -27,6 +28,7 @@ export function toUser(record: UserRecord): User {
   return {
     id: record.userId,
     email: record.email,
+    isGuest: record.email === undefined,
     displayName: record.displayName,
     language: record.language,
     role: record.role,
@@ -51,7 +53,7 @@ export async function createUser(user: UserRecord): Promise<void> {
   await db.send(
     new PutCommand({
       TableName: config.usersTable,
-      Item: { ...user, email: user.email.toLowerCase() },
+      Item: { ...user, email: user.email?.toLowerCase() },
       // Never overwrite an existing user by accident.
       ConditionExpression: 'attribute_not_exists(userId)',
     }),
@@ -61,8 +63,9 @@ export async function createUser(user: UserRecord): Promise<void> {
 /** Changes the given fields and returns the updated user. */
 export async function updateUser(
   userId: string,
-  changes: Partial<Pick<UserRecord, 'displayName' | 'language' | 'googleId'>>,
+  changes: Partial<Pick<UserRecord, 'email' | 'passwordHash' | 'googleId' | 'displayName' | 'language'>>,
 ): Promise<UserRecord> {
+  if (changes.email) changes = { ...changes, email: changes.email.toLowerCase() };
   const fields = Object.entries(changes).filter(([, value]) => value !== undefined);
   const result = await db.send(
     new UpdateCommand({
