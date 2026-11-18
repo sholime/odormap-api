@@ -52,6 +52,8 @@ export async function reportRoutes(app: FastifyInstance) {
       reportId: newId(),
       userId,
       areaId: area.areaId,
+      // Area and day together, e.g. "backa-topola#2026-11-18". The database index uses it
+      // to find all reports for one area on one day quickly (see db/reports.ts).
       areaDay: areaDayKey(area.areaId, observedAt.toISOString()),
       createdAt: now.toISOString(),
       observedAt: observedAt.toISOString(),
