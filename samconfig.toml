@@ -1,0 +1,14 @@
+# Settings for `sam deploy --config-env staging` and `--config-env production`.
+version = 0.1
+
+[staging.deploy.parameters]
+stack_name = "odormap-api-staging"
+region = "eu-central-1"
+capabilities = "CAPABILITY_IAM"
+resolve_s3 = true
+
+[production.deploy.parameters]
+stack_name = "odormap-api-production"
+region = "eu-central-1"
+capabilities = "CAPABILITY_IAM"
+resolve_s3 = true

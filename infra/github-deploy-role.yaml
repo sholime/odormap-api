@@ -1,0 +1,67 @@
+# One-time setup: lets GitHub Actions in sholime/odormap-api deploy to this AWS account
+# without storing any AWS keys in GitHub. Create it once in the CloudFormation console;
+# see docs/deploy-setup.md.
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Role that GitHub Actions uses to deploy the OdorMap API
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: sholime/odormap-api
+
+Resources:
+  # Tells AWS to trust login tokens issued by GitHub Actions.
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: odormap-github-deploy
+      # Only workflows from this one repository may use the role.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Federated: !Ref GitHubOidcProvider }
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubRepo}:*
+      # What a deploy needs to create or update: the stack, the function, the tables and the logs.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        # The deploy creates a role for the Lambda function; allow that, but only for OdorMap roles.
+        - PolicyName: manage-odormap-function-roles
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PassRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/odormap-api-*
+
+Outputs:
+  DeployRoleArn:
+    Description: Put this in the GitHub repository variable AWS_DEPLOY_ROLE_ARN
+    Value: !GetAtt DeployRole.Arn
