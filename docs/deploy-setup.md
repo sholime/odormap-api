@@ -14,9 +14,12 @@ zero-spend or monthly cost template, set it to **$1**, and add your email.
 
 1. Open **CloudFormation → Create stack → With new resources**.
 2. Choose **Upload a template file** and pick `infra/github-deploy-role.yaml` from this repo.
-3. Name the stack `odormap-github-deploy` and click through to **Submit**.
-   On the last page, tick the box that allows creating IAM resources.
-4. When it finishes, open the stack's **Outputs** tab and copy `DeployRoleArn`.
+3. Name the stack `odormap-github-deploy` and click **Next**.
+4. On **Configure stack options**, scroll to the bottom. Under **Capabilities**, tick
+   "I acknowledge that AWS CloudFormation might create IAM resources with custom names".
+   Then click **Next** and **Submit**. (Without it the stack fails with
+   "Requires capabilities: [CAPABILITY_NAMED_IAM]"; delete it and start again.)
+5. When it finishes, open the stack's **Outputs** tab and copy `DeployRoleArn`.
 
 ## 3. Get a Google sign-in client id
 
