@@ -23,6 +23,7 @@ const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 const MAX_REPORTS_PER_HOUR = 10;
 const MAX_QUERY_DAYS = 31;
+const UNKNOWN_AREA_ID = 'unknown';
 
 export async function reportRoutes(app: FastifyInstance) {
   app.post('/reports', async (request, reply) => {
@@ -30,8 +31,8 @@ export async function reportRoutes(app: FastifyInstance) {
     const body = CreateReportRequest.parse(request.body);
     const now = new Date();
 
-    const area = findAreaFor(body.location, AREAS);
-    if (!area) throw new HttpError(400, 'This location is outside the areas OdorMap covers');
+    // Reports from outside every area are kept too, under the area id "unknown".
+    const areaId = findAreaFor(body.location, AREAS)?.areaId ?? UNKNOWN_AREA_ID;
 
     const recent = await listUserReports(userId, MAX_REPORTS_PER_HOUR);
     const sentInLastHour = recent.filter((r) => now.getTime() - Date.parse(r.createdAt) < HOUR).length;
@@ -42,10 +43,10 @@ export async function reportRoutes(app: FastifyInstance) {
     const record: ReportRecord = {
       reportId: newId(),
       userId,
-      areaId: area.areaId,
+      areaId,
       // Area and day together, e.g. "backa-topola#2026-11-18". The database index uses it
       // to find all reports for one area on one day quickly (see db/reports.ts).
-      areaDay: areaDayKey(area.areaId, now.toISOString()),
+      areaDay: areaDayKey(areaId, now.toISOString()),
       createdAt: now.toISOString(),
       // Reports are for odors present right now, so the time noticed is the time sent.
       observedAt: now.toISOString(),
