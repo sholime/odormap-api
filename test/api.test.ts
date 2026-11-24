@@ -251,14 +251,21 @@ describe('reports', () => {
     expect(response.json().weather).toBeUndefined();
   });
 
-  it('rejects a location outside every area', async () => {
+  it('saves a location outside every area under the area "unknown"', async () => {
+    database.on(QueryCommand).resolves({ Items: [] });
+    database.on(PutCommand).resolves({});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('down', { status: 503 })));
+
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/reports',
       headers: await loggedIn(),
       payload: { location: { lat: 44.8125, lon: 20.4612 }, strength: 3 },
     });
-    expect(response.statusCode).toBe(400);
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().areaId).toBe('unknown');
+    expect(database.commandCalls(PutCommand)[0]!.args[0].input.Item!.areaDay).toMatch(/^unknown#/);
   });
 
   it('rejects a report without a strength', async () => {
