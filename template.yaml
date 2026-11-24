@@ -1,0 +1,135 @@
+# Everything OdorMap's backend needs in AWS, deployed with AWS SAM:
+# one Lambda function with a public URL, and three DynamoDB tables.
+# The same template is deployed twice: once for staging, once for production.
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: OdorMap API
+
+Parameters:
+  Stage:
+    Type: String
+    AllowedValues: [staging, production]
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: Long random text used to sign login tokens
+  GoogleClientId:
+    Type: String
+    Description: OAuth client id from Google Cloud Console
+  AllowedOrigins:
+    Type: String
+    Description: Comma-separated web addresses allowed to call the API, e.g. https://odormap.vercel.app
+
+# Table capacity: the AWS free tier covers 25 read and 25 write units per account.
+# Each table and index below uses 2, so 6 x 2 = 12 per stage, 24 for both stages.
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    MemorySize: 512
+    Timeout: 10
+
+Resources:
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub odormap-api-${Stage}
+      CodeUri: ./
+      Handler: lambda.handler
+      FunctionUrlConfig:
+        AuthType: NONE # The API checks logins itself.
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
+          USERS_TABLE: !Ref UsersTable
+          SOURCES_TABLE: !Ref SourcesTable
+          REPORTS_TABLE: !Ref ReportsTable
+          JWT_SECRET: !Ref JwtSecret
+          GOOGLE_CLIENT_ID: !Ref GoogleClientId
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref UsersTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref SourcesTable }
+        - DynamoDBCrudPolicy: { TableName: !Ref ReportsTable }
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints: [src/lambda.ts]
+        Format: esm
+        OutExtension: [.js=.mjs]
+        Target: es2022
+        Sourcemap: true
+        # Lets libraries that still use require() work in an ES module bundle.
+        Banner:
+          - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+
+  # Keep logs for 14 days only, so they never grow past the free allowance.
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/odormap-api-${Stage}
+      RetentionInDays: 14
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain # Never delete user data by accident.
+    Properties:
+      TableName: !Sub odormap-${Stage}-users
+      BillingMode: PROVISIONED
+      ProvisionedThroughput: { ReadCapacityUnits: 2, WriteCapacityUnits: 2 }
+      AttributeDefinitions:
+        - { AttributeName: userId, AttributeType: S }
+        - { AttributeName: email, AttributeType: S }
+        - { AttributeName: googleId, AttributeType: S }
+      KeySchema:
+        - { AttributeName: userId, KeyType: HASH }
+      GlobalSecondaryIndexes:
+        - IndexName: byEmail
+          KeySchema: [{ AttributeName: email, KeyType: HASH }]
+          Projection: { ProjectionType: ALL }
+          ProvisionedThroughput: { ReadCapacityUnits: 2, WriteCapacityUnits: 2 }
+        - IndexName: byGoogle
+          KeySchema: [{ AttributeName: googleId, KeyType: HASH }]
+          Projection: { ProjectionType: ALL }
+          ProvisionedThroughput: { ReadCapacityUnits: 2, WriteCapacityUnits: 2 }
+
+  SourcesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      TableName: !Sub odormap-${Stage}-sources
+      BillingMode: PROVISIONED
+      ProvisionedThroughput: { ReadCapacityUnits: 2, WriteCapacityUnits: 2 }
+      AttributeDefinitions:
+        - { AttributeName: sourceId, AttributeType: S }
+      KeySchema:
+        - { AttributeName: sourceId, KeyType: HASH }
+
+  ReportsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      TableName: !Sub odormap-${Stage}-reports
+      BillingMode: PROVISIONED
+      ProvisionedThroughput: { ReadCapacityUnits: 2, WriteCapacityUnits: 2 }
+      AttributeDefinitions:
+        - { AttributeName: userId, AttributeType: S }
+        - { AttributeName: reportId, AttributeType: S }
+        - { AttributeName: areaDay, AttributeType: S }
+        - { AttributeName: observedAt, AttributeType: S }
+      KeySchema:
+        - { AttributeName: userId, KeyType: HASH }
+        - { AttributeName: reportId, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        - IndexName: byAreaDay
+          KeySchema:
+            - { AttributeName: areaDay, KeyType: HASH }
+            - { AttributeName: observedAt, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+          ProvisionedThroughput: { ReadCapacityUnits: 2, WriteCapacityUnits: 2 }
+
+Outputs:
+  ApiUrl:
+    Description: Public address of the API
+    Value: !GetAtt ApiFunctionUrl.FunctionUrl
