@@ -102,7 +102,7 @@ export async function reportRoutes(app: FastifyInstance) {
       records.push(...(await listReportsForAreaDay(areaDay, from.toISOString(), to.toISOString())));
     }
 
-    return records.filter((r) => isInsideBox(r, query)).map(toPublicReport);
+    return records.filter((r) => isInsideBox(r, query)).map((r) => toPublicReport(r, user.userId));
   });
 }
 
@@ -121,7 +121,8 @@ function isInsideBox(record: ReportRecord, box: ReportsQuery): boolean {
 }
 
 /** Anonymous version for other residents: no user, no comment, rounded location. */
-function toPublicReport(record: ReportRecord): PublicReport {
+/** A report as everyone sees it: no user id, location rounded. isMine marks the caller's own reports. */
+function toPublicReport(record: ReportRecord, callerId: string): PublicReport {
   return {
     id: record.reportId,
     areaId: record.areaId,
@@ -130,6 +131,8 @@ function toPublicReport(record: ReportRecord): PublicReport {
     strength: record.strength,
     odorKind: record.odorKind,
     odorKindOther: record.odorKindOther,
+    comment: record.comment,
     weather: record.weather,
+    isMine: record.userId === callerId,
   };
 }

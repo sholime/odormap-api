@@ -344,7 +344,7 @@ describe('reports', () => {
     expect(update.ExpressionAttributeValues).toEqual({ ':strength': 5, ':odorKind': 'pig_manure' });
   });
 
-  it('lists reports for others without names, comments or exact locations', async () => {
+  it('lists reports for everyone without names or exact locations, marking the caller\'s own', async () => {
     database.on(QueryCommand).resolves({
       Items: [
         {
@@ -355,7 +355,7 @@ describe('reports', () => {
           location: { lat: 45.815549, lon: 19.631812 },
           strength: 5,
           odorKind: 'pig_manure',
-              comment: 'Right behind my house at Main Street 12',
+          comment: 'Right behind my house at Main Street 12',
         },
       ],
     });
@@ -370,7 +370,8 @@ describe('reports', () => {
     const [report] = response.json();
     expect(report.location).toEqual({ lat: 45.816, lon: 19.632 });
     expect(report).not.toHaveProperty('userId');
-    expect(report).not.toHaveProperty('comment');
+    expect(report.comment).toBe('Right behind my house at Main Street 12');
+    expect(report.isMine).toBe(true);
   });
 
   it('lists reports from outside every area only for admins', async () => {
