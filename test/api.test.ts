@@ -21,8 +21,8 @@ const app = buildApp();
 const topola = { lat: 45.8155, lon: 19.6318 };
 const userId = '019a9a3c-6b1e-7000-8000-000000000001';
 
-async function loggedIn() {
-  const { accessToken } = await createTokens({ userId, role: 'user' });
+async function loggedIn(role: 'user' | 'admin' = 'user') {
+  const { accessToken } = await createTokens({ userId, role });
   return { authorization: `Bearer ${accessToken}` };
 }
 
@@ -371,5 +371,16 @@ describe('reports', () => {
     expect(report.location).toEqual({ lat: 45.816, lon: 19.632 });
     expect(report).not.toHaveProperty('userId');
     expect(report).not.toHaveProperty('comment');
+  });
+
+  it('lists reports from outside every area only for admins', async () => {
+    database.on(QueryCommand).resolves({ Items: [] });
+    const url = '/api/v1/reports?areaId=unknown&from=2026-11-17T00:00:00Z&to=2026-11-17T23:59:59Z';
+
+    const asUser = await app.inject({ method: 'GET', url, headers: await loggedIn() });
+    const asAdmin = await app.inject({ method: 'GET', url, headers: await loggedIn('admin') });
+
+    expect(asUser.statusCode).toBe(403);
+    expect(asAdmin.statusCode).toBe(200);
   });
 });
