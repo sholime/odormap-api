@@ -19,6 +19,36 @@ export const AREAS: Area[] = [
     timezone: 'Europe/Belgrade',
     active: true,
   },
+  {
+    areaId: 'novi-sad',
+    name: 'Novi Sad',
+    // A rough box around the city and the villages of the city area (Futog, Kać, Kovilj, ...).
+    // TODO: replace with the real boundary.
+    boundary: [
+      { lat: 45.13, lon: 19.6 },
+      { lat: 45.4, lon: 19.6 },
+      { lat: 45.4, lon: 20.05 },
+      { lat: 45.13, lon: 20.05 },
+    ],
+    languages: ['sr', 'hu'],
+    timezone: 'Europe/Belgrade',
+    active: true,
+  },
+  {
+    areaId: 'zrenjanin',
+    name: 'Zrenjanin',
+    // A rough box around the city and its villages.
+    // TODO: replace with the real municipal boundary.
+    boundary: [
+      { lat: 45.15, lon: 20.15 },
+      { lat: 45.6, lon: 20.15 },
+      { lat: 45.6, lon: 20.75 },
+      { lat: 45.15, lon: 20.75 },
+    ],
+    languages: ['sr', 'hu'],
+    timezone: 'Europe/Belgrade',
+    active: true,
+  },
 ];
 
 export function getArea(areaId: string): Area | undefined {
