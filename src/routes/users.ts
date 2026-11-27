@@ -4,8 +4,17 @@
 import type { FastifyInstance } from 'fastify';
 import { UpdateUserRequest } from '@odormap/common';
 import { requireAdmin } from '../auth.js';
-import { anonymizeUserReports, deleteUser, getUser, listAllUsers, toAdminUser, updateUser } from '../db/index.js';
+import {
+  anonymizeUserReports,
+  deleteUser,
+  getUser,
+  listAllUsers,
+  listUserReports,
+  toAdminUser,
+  updateUser,
+} from '../db/index.js';
 import { HttpError } from '../errors.js';
+import { toOwnReport } from './reports.js';
 
 export async function userRoutes(app: FastifyInstance) {
   /** Every user, newest first. */
@@ -13,6 +22,13 @@ export async function userRoutes(app: FastifyInstance) {
     await requireAdmin(request);
     const users = await listAllUsers();
     return users.map(toAdminUser).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  });
+
+  /** One user's latest 50 reports, newest first, shown the same way as their own "My reports". */
+  app.get<{ Params: { id: string } }>('/users/:id/reports', async (request) => {
+    await requireAdmin(request);
+    const records = await listUserReports(request.params.id, 50);
+    return records.map(toOwnReport);
   });
 
   app.patch<{ Params: { id: string } }>('/users/:id', async (request) => {
