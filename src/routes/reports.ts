@@ -134,7 +134,7 @@ function isInsideBox(record: ReportRecord, box: ReportsQuery): boolean {
  * The person's own report: the location is rounded like everyone else's, without its accuracy.
  * The exact location is only stored, for later analysis.
  */
-function toOwnReport(record: ReportRecord): OdorReport {
+export function toOwnReport(record: ReportRecord): OdorReport {
   const { locationAccuracyM, ...report } = toOdorReport(record);
   return { ...report, location: roundLocation(record.location) };
 }

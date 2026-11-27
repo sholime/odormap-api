@@ -477,6 +477,36 @@ describe('admin: users', () => {
     expect(response.statusCode).toBe(403);
   });
 
+  it("lists one user's latest reports for admins only", async () => {
+    database.on(QueryCommand).resolves({
+      Items: [
+        {
+          reportId: '019a9a3c-6b1e-7000-8000-0000000000b1',
+          userId: otherId,
+          areaId: 'backa-topola',
+          observedAt: '2026-11-26T18:00:00.000Z',
+          createdAt: '2026-11-26T18:00:00.000Z',
+          location: { lat: 45.815549, lon: 19.631812 },
+          locationAccuracyM: 12,
+          strength: 4,
+          odorKind: 'pig_manure',
+        },
+      ],
+    });
+    const url = `/api/v1/users/${otherId}/reports`;
+
+    const asUser = await app.inject({ method: 'GET', url, headers: await loggedIn() });
+    const asAdmin = await app.inject({ method: 'GET', url, headers: await loggedIn('admin') });
+
+    expect(asUser.statusCode).toBe(403);
+    const [report] = asAdmin.json();
+    expect(report.location).toEqual({ lat: 45.816, lon: 19.632 });
+    expect(report).not.toHaveProperty('locationAccuracyM');
+    const query = database.commandCalls(QueryCommand)[0]!.args[0].input;
+    expect(query.ExpressionAttributeValues).toEqual({ ':userId': otherId });
+    expect(query.Limit).toBe(50);
+  });
+
   it('lists every user, newest first, without passwords', async () => {
     database.on(ScanCommand).resolvesOnce({ Items: [other], LastEvaluatedKey: { userId: otherId } }).resolves({ Items: [guest] });
 
