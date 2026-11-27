@@ -1,7 +1,7 @@
 // Submitting, changing and listing odor reports.
 
 import type { FastifyInstance } from 'fastify';
-import { CreateReportRequest, ReportsQuery, UpdateReportRequest, findAreaFor, type OdorReport, type PublicReport } from '@odormap/common';
+import { CreateReportRequest, ReportsQuery, UpdateReportRequest, findAreaFor, type OdorReport, type PublicReport, type ReportAuthor } from '@odormap/common';
 import { v7 as newId } from 'uuid';
 import { AREAS, getArea } from '../areas.js';
 import { requireUser } from '../auth.js';
@@ -10,6 +10,7 @@ import {
   areaDayKey,
   createReport,
   getReport,
+  DELETED_USER_ID,
   getUser,
   listReportsForAreaDay,
   listUserReports,
@@ -106,7 +107,12 @@ export async function reportRoutes(app: FastifyInstance) {
       records.push(...(await listReportsForAreaDay(areaDay, from.toISOString(), to.toISOString())));
     }
 
-    return records.filter((r) => isInsideBox(r, query)).map((r) => toPublicReport(r, user.userId));
+    const found = records.filter((r) => isInsideBox(r, query));
+    if (user.role !== 'admin') return found.map((r) => toPublicReport(r, user.userId));
+
+    // Only admins see who sent each report, to check reports and stop misuse.
+    const authors = await findAuthors(found.map((r) => r.userId));
+    return found.map((r) => ({ ...toPublicReport(r, user.userId), author: authors.get(r.userId) }));
   });
 }
 
@@ -147,4 +153,14 @@ function toPublicReport(record: ReportRecord, callerId: string): PublicReport {
     weather: record.weather,
     isMine: record.userId === callerId,
   };
+}
+
+/** Who sent the reports, by user id. A deleted account keeps only its id. */
+async function findAuthors(userIds: string[]): Promise<Map<string, ReportAuthor>> {
+  const authors = new Map<string, ReportAuthor>();
+  for (const id of new Set(userIds)) {
+    const user = id === DELETED_USER_ID ? undefined : await getUser(id);
+    authors.set(id, { id, displayName: user?.displayName, email: user?.email });
+  }
+  return authors;
 }
