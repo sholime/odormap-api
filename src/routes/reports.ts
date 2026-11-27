@@ -1,7 +1,7 @@
 // Submitting, changing and listing odor reports.
 
 import type { FastifyInstance } from 'fastify';
-import { CreateReportRequest, ReportsQuery, UpdateReportRequest, findAreaFor, type PublicReport } from '@odormap/common';
+import { CreateReportRequest, ReportsQuery, UpdateReportRequest, findAreaFor, type OdorReport, type PublicReport } from '@odormap/common';
 import { v7 as newId } from 'uuid';
 import { AREAS, getArea } from '../areas.js';
 import { requireUser } from '../auth.js';
@@ -69,7 +69,7 @@ export async function reportRoutes(app: FastifyInstance) {
     // For the admin "Users" screen. The report is saved either way.
     await addReports(userId, 1, record.createdAt).catch((error) => request.log.error(error));
     reply.status(201);
-    return toOdorReport(record);
+    return toOwnReport(record);
   });
 
   app.patch<{ Params: { id: string } }>('/reports/:id', async (request) => {
@@ -77,13 +77,13 @@ export async function reportRoutes(app: FastifyInstance) {
     const changes = UpdateReportRequest.parse(request.body);
     // Looking up by the caller's own userId means people can only change their own reports.
     if (!(await getReport(userId, request.params.id))) throw new HttpError(404, 'Report not found');
-    return toOdorReport(await updateReport(userId, request.params.id, changes));
+    return toOwnReport(await updateReport(userId, request.params.id, changes));
   });
 
   app.get('/reports/mine', async (request) => {
     const { userId } = await requireUser(request);
     const records = await listUserReports(userId, 50);
-    return records.map(toOdorReport);
+    return records.map(toOwnReport);
   });
 
   app.get('/reports', async (request) => {
@@ -128,7 +128,15 @@ function isInsideBox(record: ReportRecord, box: ReportsQuery): boolean {
   );
 }
 
-/** Anonymous version for other residents: no user, no comment, rounded location. */
+/**
+ * The person's own report: the location is rounded like everyone else's, without its accuracy.
+ * The exact location is only stored, for later analysis.
+ */
+function toOwnReport(record: ReportRecord): OdorReport {
+  const { locationAccuracyM, ...report } = toOdorReport(record);
+  return { ...report, location: roundLocation(record.location) };
+}
+
 /** A report as everyone sees it: no user id, location rounded. isMine marks the caller's own reports. */
 function toPublicReport(record: ReportRecord, callerId: string): PublicReport {
   return {
