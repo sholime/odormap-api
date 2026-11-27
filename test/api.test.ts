@@ -7,6 +7,7 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { mockClient } from 'aws-sdk-client-mock';
@@ -28,6 +29,9 @@ async function loggedIn(role: 'user' | 'admin' = 'user') {
 
 beforeEach(() => {
   database.reset();
+  // Unknown user, and updates that succeed, unless a test says otherwise.
+  database.on(GetCommand).resolves({});
+  database.on(UpdateCommand).resolves({});
   // Open-Meteo answers with calm weather unless a test says otherwise.
   vi.stubGlobal(
     'fetch',
@@ -158,7 +162,9 @@ describe('guests', () => {
     const guestId = userId;
     const accountId = '019a9a3c-6b1e-7000-8000-000000000002';
     const passwordHash = await hashPassword('correct-horse');
-    database.on(GetCommand).resolves({ Item: { userId: guestId, displayName: 'Guest', role: 'user' } });
+    database.on(GetCommand).resolves({
+      Item: { userId: guestId, displayName: 'Guest', role: 'user', reportCount: 1, lastReportAt: '2026-11-26T10:00:00Z' },
+    });
     database.on(QueryCommand, { IndexName: 'byEmail' }).resolves({
       Items: [{ userId: accountId, email: 'ana@example.com', passwordHash, role: 'user' }],
     });
@@ -180,6 +186,10 @@ describe('guests', () => {
     expect(copy![0]!.PutRequest!.Item).toMatchObject({ userId: accountId, reportId: 'r1' });
     expect(remove![0]!.DeleteRequest!.Key).toEqual({ userId: guestId, reportId: 'r1' });
     expect(database.commandCalls(DeleteCommand)[0]!.args[0].input.Key).toEqual({ userId: guestId });
+    // The guest's report count is added to the account.
+    const count = database.commandCalls(UpdateCommand)[0]!.args[0].input;
+    expect(count.Key).toEqual({ userId: accountId });
+    expect(count.ExpressionAttributeValues).toEqual({ ':count': 1, ':at': '2026-11-26T10:00:00Z' });
   });
 });
 
@@ -233,6 +243,25 @@ describe('reports', () => {
       humidityPercent: 81,
       pressureHpa: 1021.3,
     });
+    // The user's report count goes up, for the admin "Users" screen.
+    const count = database.commandCalls(UpdateCommand)[0]!.args[0].input;
+    expect(count.Key).toEqual({ userId });
+    expect(count.UpdateExpression).toBe('ADD reportCount :count SET lastReportAt = :at');
+    expect(count.ExpressionAttributeValues![':count']).toBe(1);
+  });
+
+  it('refuses reports from a blocked user', async () => {
+    database.on(GetCommand).resolves({ Item: { userId, role: 'user', blocked: true } });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/reports',
+      headers: await loggedIn(),
+      payload: { location: topola, strength: 4 },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(database.commandCalls(PutCommand)).toHaveLength(0);
   });
 
   it('still saves the report when the weather service is down', async () => {
@@ -383,5 +412,111 @@ describe('reports', () => {
 
     expect(asUser.statusCode).toBe(403);
     expect(asAdmin.statusCode).toBe(200);
+  });
+});
+
+describe('admin: users', () => {
+  const otherId = '019a9a3c-6b1e-7000-8000-000000000002';
+  const other = {
+    userId: otherId,
+    email: 'marko@example.com',
+    passwordHash: 'scrypt$secret',
+    googleId: 'g-123',
+    displayName: 'Marko',
+    language: 'sr',
+    role: 'user',
+    createdAt: '2026-11-21T10:00:00Z',
+    reportCount: 9,
+    lastReportAt: '2026-11-26T18:00:00Z',
+  };
+  const guest = { userId: '019a9a3c-6b1e-7000-8000-000000000003', displayName: 'Gost', language: 'hu', role: 'user', createdAt: '2026-11-25T10:00:00Z' };
+
+  it('is for admins only', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/v1/users', headers: await loggedIn() });
+    expect(response.statusCode).toBe(403);
+  });
+
+  it('lists every user, newest first, without passwords', async () => {
+    database.on(ScanCommand).resolvesOnce({ Items: [other], LastEvaluatedKey: { userId: otherId } }).resolves({ Items: [guest] });
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/users', headers: await loggedIn('admin') });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([
+      {
+        id: guest.userId,
+        isGuest: true,
+        displayName: 'Gost',
+        language: 'hu',
+        role: 'user',
+        createdAt: '2026-11-25T10:00:00Z',
+        signInMethods: [],
+        blocked: false,
+        reportCount: 0,
+      },
+      {
+        id: otherId,
+        email: 'marko@example.com',
+        isGuest: false,
+        displayName: 'Marko',
+        language: 'sr',
+        role: 'user',
+        createdAt: '2026-11-21T10:00:00Z',
+        signInMethods: ['password', 'google'],
+        blocked: false,
+        reportCount: 9,
+        lastReportAt: '2026-11-26T18:00:00Z',
+      },
+    ]);
+  });
+
+  it('makes a user an admin and blocks them', async () => {
+    database.on(GetCommand).resolves({ Item: other });
+    database.on(UpdateCommand).resolves({ Attributes: { ...other, role: 'admin', blocked: true } });
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${otherId}`,
+      headers: await loggedIn('admin'),
+      payload: { role: 'admin', blocked: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ role: 'admin', blocked: true });
+    const update = database.commandCalls(UpdateCommand)[0]!.args[0].input;
+    expect(update.Key).toEqual({ userId: otherId });
+    expect(update.ExpressionAttributeValues).toEqual({ ':role': 'admin', ':blocked': true });
+  });
+
+  it("does not let admins change or delete their own account", async () => {
+    const headers = await loggedIn('admin');
+    const change = await app.inject({ method: 'PATCH', url: `/api/v1/users/${userId}`, headers, payload: { blocked: true } });
+    const remove = await app.inject({ method: 'DELETE', url: `/api/v1/users/${userId}`, headers });
+    expect(change.statusCode).toBe(400);
+    expect(remove.statusCode).toBe(400);
+  });
+
+  it('answers 404 for an unknown user', async () => {
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/users/${otherId}`,
+      headers: await loggedIn('admin'),
+      payload: { role: 'admin' },
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('deletes a user and keeps their reports without the user or the comment', async () => {
+    database.on(GetCommand).resolves({ Item: other });
+    database.on(QueryCommand).resolves({ Items: [{ userId: otherId, reportId: 'r1', strength: 4, comment: 'Kod škole' }] });
+    database.on(BatchWriteCommand).resolves({});
+    database.on(DeleteCommand).resolves({});
+
+    const response = await app.inject({ method: 'DELETE', url: `/api/v1/users/${otherId}`, headers: await loggedIn('admin') });
+
+    expect(response.statusCode).toBe(204);
+    const kept = Object.values(database.commandCalls(BatchWriteCommand)[0]!.args[0].input.RequestItems!)[0]!;
+    expect(kept[0]!.PutRequest!.Item).toEqual({ userId: '00000000-0000-0000-0000-000000000000', reportId: 'r1', strength: 4 });
+    expect(database.commandCalls(DeleteCommand)[0]!.args[0].input.Key).toEqual({ userId: otherId });
   });
 });
