@@ -7,6 +7,7 @@ import { ZodError } from 'zod';
 import { config } from './config.js';
 import { HttpError } from './errors.js';
 import { areaRoutes } from './routes/areas.js';
+import { userRoutes } from './routes/users.js';
 import { authRoutes } from './routes/auth.js';
 import { meRoutes } from './routes/me.js';
 import { reportRoutes } from './routes/reports.js';
@@ -38,6 +39,7 @@ export function buildApp() {
       await api.register(reportRoutes);
       await api.register(sourceRoutes);
       await api.register(areaRoutes);
+      await api.register(userRoutes);
     },
     { prefix: '/api/v1' },
   );

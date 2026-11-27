@@ -22,6 +22,7 @@ src/
   services/       passwords, login tokens, Google sign-in, weather
   db/             all database access; nothing else talks to DynamoDB
 test/             tests, with the database and weather replaced by fakes
+scripts/          one-time maintenance scripts, run by hand
 template.yaml     the AWS resources (function, tables, logs)
 infra/            one-time AWS setup for automatic deploys
 ```
@@ -49,6 +50,11 @@ All under `/api/v1`. "Login" means an `Authorization: Bearer <accessToken>` head
 | GET | /sources | Login | Known pollution sources |
 | POST, PATCH | /sources | Admin | Add or change a pollution source |
 | GET | /areas | Anyone | Covered areas |
+| GET | /users | Admin | Every user, with report count and last report |
+| PATCH | /users/:id | Admin | Make someone an admin (or not), block or unblock them |
+| DELETE | /users/:id | Admin | Delete an account; its reports stay, unlinked and without comments |
+
+A blocked user can still log in, but `POST /reports` answers 403.
 
 `GET /health` answers `{"ok":true}`.
 

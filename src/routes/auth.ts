@@ -11,6 +11,7 @@ import { GoogleLoginRequest, GuestLoginRequest, LoginRequest, RefreshRequest, Re
 import { v7 as newId } from 'uuid';
 import { optionalUser } from '../auth.js';
 import {
+  addReports,
   createUser,
   deleteUser,
   findUserByEmail,
@@ -152,6 +153,10 @@ async function logIn(request: FastifyRequest, user: UserRecord) {
   const guest = await findGuest(request);
   if (guest && guest.userId !== user.userId) {
     await moveReports(guest.userId, user.userId);
+    if (guest.reportCount && guest.lastReportAt) {
+      const last = [guest.lastReportAt, user.lastReportAt ?? ''].sort().at(-1)!;
+      await addReports(user.userId, guest.reportCount, last);
+    }
     await deleteUser(guest.userId);
   }
   return createTokens(user);

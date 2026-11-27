@@ -6,9 +6,11 @@ import { v7 as newId } from 'uuid';
 import { AREAS, getArea } from '../areas.js';
 import { requireUser } from '../auth.js';
 import {
+  addReports,
   areaDayKey,
   createReport,
   getReport,
+  getUser,
   listReportsForAreaDay,
   listUserReports,
   toOdorReport,
@@ -33,6 +35,10 @@ export async function reportRoutes(app: FastifyInstance) {
 
     // Reports from outside every area are kept too, under the area id "unknown".
     const areaId = findAreaFor(body.location, AREAS)?.areaId ?? UNKNOWN_AREA_ID;
+
+    if ((await getUser(userId))?.blocked) {
+      throw new HttpError(403, 'This account is blocked and cannot send reports');
+    }
 
     const recent = await listUserReports(userId, MAX_REPORTS_PER_HOUR);
     const sentInLastHour = recent.filter((r) => now.getTime() - Date.parse(r.createdAt) < HOUR).length;
@@ -60,6 +66,8 @@ export async function reportRoutes(app: FastifyInstance) {
       weather: await fetchWeather(body.location),
     };
     await createReport(record);
+    // For the admin "Users" screen. The report is saved either way.
+    await addReports(userId, 1, record.createdAt).catch((error) => request.log.error(error));
     reply.status(201);
     return toOdorReport(record);
   });
