@@ -229,12 +229,16 @@ describe('reports', () => {
       method: 'POST',
       url: '/api/v1/reports',
       headers: await loggedIn(),
-      payload: { location: topola, strength: 4 },
+      payload: { location: topola, strength: 4, locationAccuracyM: 12 },
     });
 
     expect(response.statusCode).toBe(201);
     const report = response.json();
     expect(report.areaId).toBe('backa-topola');
+    // The exact location is stored, but even the owner gets it rounded back.
+    expect(database.commandCalls(PutCommand)[0]!.args[0].input.Item!.location).toEqual(topola);
+    expect(report.location).toEqual({ lat: 45.815, lon: 19.63 });
+    expect(report.locationAccuracyM).toBeUndefined();
     expect(report.odorKind).toBe('not_set');
     expect(report.weather).toEqual({
       windSpeedMs: 3.2,
@@ -397,7 +401,7 @@ describe('reports', () => {
 
     expect(response.statusCode).toBe(200);
     const [report] = response.json();
-    expect(report.location).toEqual({ lat: 45.816, lon: 19.632 });
+    expect(report.location).toEqual({ lat: 45.815, lon: 19.63 });
     expect(report).not.toHaveProperty('userId');
     expect(report.comment).toBe('Right behind my house at Main Street 12');
     expect(report.isMine).toBe(true);
