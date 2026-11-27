@@ -407,6 +407,43 @@ describe('reports', () => {
     expect(report.isMine).toBe(true);
   });
 
+  it('tells only admins who sent each report', async () => {
+    const otherId = '019a9a3c-6b1e-7000-8000-000000000002';
+    const deletedId = '00000000-0000-0000-0000-000000000000';
+    const stored = (reportId: string, id: string) => ({
+      reportId,
+      userId: id,
+      areaId: 'backa-topola',
+      observedAt: '2026-11-17T18:30:00.000Z',
+      location: topola,
+      strength: 3,
+      odorKind: 'not_set',
+    });
+    database.on(QueryCommand).resolves({
+      Items: [
+        stored('019a9a3c-6b1e-7000-8000-0000000000b1', otherId),
+        stored('019a9a3c-6b1e-7000-8000-0000000000b2', otherId),
+        stored('019a9a3c-6b1e-7000-8000-0000000000b3', deletedId),
+      ],
+    });
+    database.on(GetCommand, { Key: { userId: otherId } }).resolves({
+      Item: { userId: otherId, displayName: 'Ana', email: 'ana@example.com', role: 'user' },
+    });
+    const url = '/api/v1/reports?areaId=backa-topola&from=2026-11-17T00:00:00Z&to=2026-11-17T23:59:59Z';
+
+    const asUser = await app.inject({ method: 'GET', url, headers: await loggedIn() });
+    const asAdmin = await app.inject({ method: 'GET', url, headers: await loggedIn('admin') });
+
+    expect(asUser.json()[0]).not.toHaveProperty('author');
+    expect(asAdmin.json().map((r: { author: unknown }) => r.author)).toEqual([
+      { id: otherId, displayName: 'Ana', email: 'ana@example.com' },
+      { id: otherId, displayName: 'Ana', email: 'ana@example.com' },
+      { id: deletedId },
+    ]);
+    // Each sender is looked up once.
+    expect(database.commandCalls(GetCommand)).toHaveLength(1);
+  });
+
   it('lists reports from outside every area for everyone', async () => {
     database.on(QueryCommand).resolves({ Items: [] });
     const url = '/api/v1/reports?areaId=unknown&from=2026-11-17T00:00:00Z&to=2026-11-17T23:59:59Z';
