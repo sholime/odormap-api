@@ -407,14 +407,14 @@ describe('reports', () => {
     expect(report.isMine).toBe(true);
   });
 
-  it('lists reports from outside every area only for admins', async () => {
+  it('lists reports from outside every area for everyone', async () => {
     database.on(QueryCommand).resolves({ Items: [] });
     const url = '/api/v1/reports?areaId=unknown&from=2026-11-17T00:00:00Z&to=2026-11-17T23:59:59Z';
 
     const asUser = await app.inject({ method: 'GET', url, headers: await loggedIn() });
     const asAdmin = await app.inject({ method: 'GET', url, headers: await loggedIn('admin') });
 
-    expect(asUser.statusCode).toBe(403);
+    expect(asUser.statusCode).toBe(200);
     expect(asAdmin.statusCode).toBe(200);
   });
 });

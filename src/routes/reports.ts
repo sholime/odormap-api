@@ -89,12 +89,8 @@ export async function reportRoutes(app: FastifyInstance) {
   app.get('/reports', async (request) => {
     const user = await requireUser(request);
     const query = ReportsQuery.parse(request.query);
-    if (query.areaId === UNKNOWN_AREA_ID) {
-      // Reports from outside every area can be anywhere, even someone's home town, so only admins see them.
-      if (user.role !== 'admin') throw new HttpError(403, 'Only admins can list reports outside the known areas');
-    } else if (!getArea(query.areaId)) {
-      throw new HttpError(404, 'Unknown area');
-    }
+    // Reports from outside every area ("unknown") are listed for everyone, like any area.
+    if (query.areaId !== UNKNOWN_AREA_ID && !getArea(query.areaId)) throw new HttpError(404, 'Unknown area');
 
     const from = new Date(query.from);
     const to = new Date(query.to);
