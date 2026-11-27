@@ -3,12 +3,12 @@
 
 import type { Point } from '@odormap/common';
 
-// Steps of 0.005 degrees: about 550 m north-south and 390 m east-west here,
-// so a rounded point is at most about 280 m from the real one.
-const STEPS_PER_DEGREE = 200;
+// Steps of 0.001 degrees: about 110 m north-south and 80 m east-west here,
+// so a rounded point is at most about 70 m from the real one.
+const STEPS_PER_DEGREE = 1000;
 
 /**
- * Rounds a location to about 500 m, so reports shown in the app cannot pinpoint someone's home.
+ * Rounds a location to about 100 m, so reports shown in the app cannot pinpoint someone's home.
  * The exact location is only stored, for later analysis.
  */
 export function roundLocation(point: Point): Point {
