@@ -27,7 +27,8 @@ describe('findAreaFor', () => {
 });
 
 describe('roundLocation', () => {
-  it('rounds to about 100 m (steps of 0.001 degrees)', () => {
+  it('rounds to about 200 m (steps of 0.002 degrees)', () => {
     expect(roundLocation({ lat: 45.815549, lon: 19.631812 })).toEqual({ lat: 45.816, lon: 19.632 });
+    expect(roundLocation({ lat: 45.8176, lon: 19.6338 })).toEqual({ lat: 45.818, lon: 19.634 });
   });
 });
